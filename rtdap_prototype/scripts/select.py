@@ -9,13 +9,10 @@ from bokeh.io import show, output_notebook, push_notebook
 from bokeh.plotting import figure
 
 from bokeh.layouts import layout, column, row, WidgetBox
-from bokeh.models import CustomJS, Panel, Spacer, HoverTool, LogColorMapper, ColumnDataSource,FactorRange, RangeSlider,\
-                         NumeralTickFormatter
-from bokeh.models.widgets import Div, Tabs, Paragraph, Dropdown, Button, PreText, Toggle, Select,\
-                                DatePicker,DateRangeSlider
+from bokeh.models import CustomJS, Panel, Spacer, HoverTool, LogColorMapper, ColumnDataSource,FactorRange, RangeSlider,NumeralTickFormatter
+from bokeh.models.widgets import Div, Tabs, Paragraph, Dropdown, Button, PreText, Toggle, Select,DatePicker,DateRangeSlider
 
 from bokeh.tile_providers import STAMEN_TERRAIN_RETINA,CARTODBPOSITRON_RETINA
-
 #mapping
 from shapely.geometry import Polygon, Point, MultiPoint, MultiPolygon
 import geopandas as gpd
@@ -29,7 +26,6 @@ from bokeh.core.properties import value
 from bokeh.palettes import Spectral6
 
 from bokeh.io import curdoc
-
 
 def selection_tab(rtdap_data):
 
