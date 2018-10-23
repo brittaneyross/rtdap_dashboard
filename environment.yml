@@ -3,6 +3,7 @@ dependencies:
   - nbserverproxy
   - pandas
   - numpy
+  - holoviews
   - fiona
   - geopandas
   - shapely
