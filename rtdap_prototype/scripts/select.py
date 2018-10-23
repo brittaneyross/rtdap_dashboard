@@ -31,209 +31,210 @@ from bokeh.palettes import Spectral6
 from bokeh.io import curdoc
 
 
-def make_base_map(tile_map=CARTODBPOSITRON_RETINA,map_width=800,map_height=500, xaxis=None, yaxis=None,
-                xrange=(-9990000,-9619944), yrange=(5011119,5310000),plot_tools="pan,wheel_zoom,reset,save"):
-
-    p = figure(tools=plot_tools, width=map_width,height=map_height, x_axis_location=xaxis, y_axis_location=yaxis,
-                x_range=xrange, y_range=yrange, toolbar_location="above")
-
-    p.grid.grid_line_color = None
-    #p.background_fill_color = None
-    p.background_fill_alpha = 0.5
-    p.border_fill_color = None
-
-    p.add_tile(tile_map)
-
-    return p
-
-def rtdap_avg(df,corr,value):
-
-    """
-    returns mean for specificed attribute by highway corridor
-
-    Keyword arguments:
-    df -- dataframe to filter by corridor and calculate mean
-    corr -- corridor name
-    value -- dataframe column name to calculate mean
-    """
-
-    df_corr = df.loc[df['corridor'] == corr]
-    mean_value = df_corr[value].mean()
-
-    return mean_value
-
-def filter_selection(df, corr, date_s, date_e, weekday, tod):
-
-    """
-    returns subset of data based on corridor and time selections
-
-    Keyword arguments:
-    df -- dataframe to filter by corridor and time selections
-    corr -- corridor name
-    date_s -- start date
-    date_e -- end date
-    weekday -- day of week (Monday - Friday)
-    tod -- time of day (8 tod time periods)
-    """
-
-    tod_start = tod[0]
-    tod_end = tod[1]
-    date_start = datetime.strptime(date_s, '%Y-%m-%d')
-    date_end = datetime.strptime(date_e, '%Y-%m-%d')
-
-    if weekday == 'All':
-        weekday = df['dow'].drop_duplicates().values.tolist()
-    else:
-        weekday = [weekday]
-
-    select_df = df.loc[(df['corridor'] == corr) &\
-                       (df['date']>=date_start) & (df['date']<=date_end) &\
-                       (df['dow'].isin(weekday)) &\
-                       (df['hour']>=tod_start) & (df['hour']<=tod_end)]
-
-    return select_df
-
-def summarize_metrics(df, corr, group, avg, select, label, missing):
-
-    """
-    return a summary of frequency, mean, mean difference, and count of missing values
-
-    Keyword arguments:
-    df -- dataframe to summarize
-    corr -- corridor name
-    group -- dataframe column name used to group and summarize data
-    avg -- mean value derived from rtdap_avg(), used calculate mean diff
-    select -- dateframe column name to calculate mean
-    label -- name for values being calculate (ie Speed, Volumne, Time etc)
-    missing -- dataframe column name of missing values
-    """
-
-    df['freq'] = 1
-    df_groupby = df.groupby(group).agg({'freq':'count',
-                                    select:np.mean,
-                                    missing:sum}).reset_index()
-
-    df_groupby.loc[:,'Mean Diff'] = (avg - df_groupby[select])/df_groupby[select]
-    df_groupby.loc[:, group] = label
-    df_groupby.columns = [corr, 'Frequency','Mean', 'Missing Values','Mean Diff']
-    df_groupby = df_groupby.set_index(corr)
-
-    return df_groupby[['Frequency','Mean','Mean Diff','Missing Values']]
-
-def vbar_chart(full_df, df):
-    """
-    returns bokeh horizontal barchart representing mean % diff
-
-    Keyword arguments:
-    df -- dataframe to derive content of barchart
-    col -- column name for values to diplay in graph
-    """
-    df_avg = full_df.groupby('FieldDeviceID').agg({'avgSpeed':np.mean})
-
-    df_select= df.groupby('FieldDeviceID').agg({'avgSpeed':np.mean})
-    df_select.columns = ['speed']
-
-    diff = df_avg.merge(df_select,how='left',left_index=True, right_index=True).fillna(0)
-    diff_no_zero = diff.loc[(diff['avgSpeed'] > 0 )& (diff['speed'] > 0)]
-    diff_no_zero['speed_difference'] = diff_no_zero['avgSpeed'] - diff_no_zero['speed']
-    diff_no_zero = diff_no_zero.reset_index()
-
-    diff_no_zero['bins'] = pd.cut(diff_no_zero['speed_difference'],bins=list(range(-20,22)),
-                                 labels = list(range(-20,22))[:-1])
-
-    source = ColumnDataSource(data = diff_no_zero.groupby('bins').agg({'speed_difference':'count'}).reset_index())
-
-    p = figure(plot_width=1000, plot_height=150, title="Speed Difference Distribution", toolbar_location="above")
-
-    p.vbar(x='bins' , top='speed_difference', width=1, color='navy', alpha=0.5, source = source)
-
-    #p.yaxis.visible = False
-    #p.xaxis.formatter = NumeralTickFormatter(format="0.f%")
-    p.xgrid.visible = False
-    p.ygrid.visible = False
-    #p.background_fill_color = None
-    p.background_fill_alpha = 0.5
-    p.border_fill_color = None
-
-    return p
-
-def hbar_chart(df,col):
-    """
-    returns bokeh horizontal barchart representing mean % diff
-
-    Keyword arguments:
-    df -- dataframe to derive content of barchart
-    col -- column name for values to diplay in graph
-    """
-    df_src = df[[col]]
-    df_src['type'] = df_src.index
-    df_src['order'] = 0
-
-    df_src['order'] = np.where(df_src.index =='Speed',2,df_src['order'])
-    df_src['order'] = np.where(df_src.index =='Occupancy',1,df_src['order'])
-    df_src['order'] = np.where(df_src.index =='Volume',0,df_src['order'])
-    df_src['color'] = '#C0C0C0'
-    df_src['color'] = np.where(df_src['Mean Diff'] < -.05, '#FF0000', df_src['color'])
-    df_src['color'] = np.where(df_src['Mean Diff'] > .05, '#008000', df_src['color'])
-    source = ColumnDataSource(data = df_src.sort_values(by='order'))
-
-    hover = HoverTool(
-            tooltips=[
-                ("Corridor Attribute", "@type"),
-                ("% Difference", "@{%s}" % (col) + '{%0.2f}'),
-            ]
-        )
-    tools = ['reset','save',hover]
-    p = figure(plot_width=400, plot_height=175, toolbar_location="above",
-               title = 'Mean Difference', tools = tools)
-
-    p.hbar(y='order', height=0.5, left=0,fill_color ='color',line_color=None,
-           right=col, color="navy", source = source)
-
-    p.yaxis.visible = False
-    p.xaxis.formatter = NumeralTickFormatter(format="0.f%")
-    p.xgrid.visible = False
-    p.ygrid.visible = False
-    #p.background_fill_color = None
-    p.background_fill_alpha = 0.5
-    p.border_fill_color = None
-
-    return source, p
-
-
-def scatter_plot(title_text):
-    rng = np.random.RandomState(0)
-    x = rng.randn(100)
-    y = rng.randn(100)
-
-    source = ColumnDataSource(
-            data=dict(
-                x=rng.randn(100),
-                y=rng.randn(100),
-                desc=['A', 'b', 'C', 'd', 'E']*20,
-            )
-        )
-
-    hover = HoverTool(
-            tooltips=[
-                ("index", "$index"),
-                ("(x,y)", "($x, $y)"),
-                ("desc", "@desc"),
-            ]
-        )
-
-    p = figure(plot_width=300, plot_height=250, tools=[hover, 'box_select'], toolbar_location="above",
-               title=title_text)
-
-    p.circle('x', 'y', size=5, source=source)
-    #p.background_fill_color = None
-    p.background_fill_alpha = 0.5
-    p.border_fill_color = None
-
-    return p
-
-
 def selection_tab(rtdap_data):
+
+    def make_base_map(tile_map=CARTODBPOSITRON_RETINA,map_width=800,map_height=500, xaxis=None, yaxis=None,
+                    xrange=(-9990000,-9619944), yrange=(5011119,5310000),plot_tools="pan,wheel_zoom,reset,save"):
+
+        p = figure(tools=plot_tools, width=map_width,height=map_height, x_axis_location=xaxis, y_axis_location=yaxis,
+                    x_range=xrange, y_range=yrange, toolbar_location="above")
+
+        p.grid.grid_line_color = None
+        #p.background_fill_color = None
+        p.background_fill_alpha = 0.5
+        p.border_fill_color = None
+
+        p.add_tile(tile_map)
+
+        return p
+
+    def rtdap_avg(df,corr,value):
+
+        """
+        returns mean for specificed attribute by highway corridor
+
+        Keyword arguments:
+        df -- dataframe to filter by corridor and calculate mean
+        corr -- corridor name
+        value -- dataframe column name to calculate mean
+        """
+
+        df_corr = df.loc[df['corridor'] == corr]
+        mean_value = df_corr[value].mean()
+
+        return mean_value
+
+    def filter_selection(df, corr, date_s, date_e, weekday, tod):
+
+        """
+        returns subset of data based on corridor and time selections
+
+        Keyword arguments:
+        df -- dataframe to filter by corridor and time selections
+        corr -- corridor name
+        date_s -- start date
+        date_e -- end date
+        weekday -- day of week (Monday - Friday)
+        tod -- time of day (8 tod time periods)
+        """
+
+        tod_start = tod[0]
+        tod_end = tod[1]
+        date_start = datetime.strptime(date_s, '%Y-%m-%d')
+        date_end = datetime.strptime(date_e, '%Y-%m-%d')
+
+        if weekday == 'All':
+            weekday = df['dow'].drop_duplicates().values.tolist()
+        else:
+            weekday = [weekday]
+
+        select_df = df.loc[(df['corridor'] == corr) &\
+                           (df['date']>=date_start) & (df['date']<=date_end) &\
+                           (df['dow'].isin(weekday)) &\
+                           (df['hour']>=tod_start) & (df['hour']<=tod_end)]
+
+        return select_df
+
+    def summarize_metrics(df, corr, group, avg, select, label, missing):
+
+        """
+        return a summary of frequency, mean, mean difference, and count of missing values
+
+        Keyword arguments:
+        df -- dataframe to summarize
+        corr -- corridor name
+        group -- dataframe column name used to group and summarize data
+        avg -- mean value derived from rtdap_avg(), used calculate mean diff
+        select -- dateframe column name to calculate mean
+        label -- name for values being calculate (ie Speed, Volumne, Time etc)
+        missing -- dataframe column name of missing values
+        """
+
+        df['freq'] = 1
+        df_groupby = df.groupby(group).agg({'freq':'count',
+                                        select:np.mean,
+                                        missing:sum}).reset_index()
+
+        df_groupby.loc[:,'Mean Diff'] = (avg - df_groupby[select])/df_groupby[select]
+        df_groupby.loc[:, group] = label
+        df_groupby.columns = [corr, 'Frequency','Mean', 'Missing Values','Mean Diff']
+        df_groupby = df_groupby.set_index(corr)
+
+        return df_groupby[['Frequency','Mean','Mean Diff','Missing Values']]
+
+    def vbar_chart(full_df, df):
+        """
+        returns bokeh horizontal barchart representing mean % diff
+
+        Keyword arguments:
+        df -- dataframe to derive content of barchart
+        col -- column name for values to diplay in graph
+        """
+        df_avg = full_df.groupby('FieldDeviceID').agg({'avgSpeed':np.mean})
+
+        df_select= df.groupby('FieldDeviceID').agg({'avgSpeed':np.mean})
+        df_select.columns = ['speed']
+
+        diff = df_avg.merge(df_select,how='left',left_index=True, right_index=True).fillna(0)
+        diff_no_zero = diff.loc[(diff['avgSpeed'] > 0 )& (diff['speed'] > 0)]
+        diff_no_zero['speed_difference'] = diff_no_zero['avgSpeed'] - diff_no_zero['speed']
+        diff_no_zero = diff_no_zero.reset_index()
+
+        diff_no_zero['bins'] = pd.cut(diff_no_zero['speed_difference'],bins=list(range(-20,22)),
+                                     labels = list(range(-20,22))[:-1])
+
+        source = ColumnDataSource(data = diff_no_zero.groupby('bins').agg({'speed_difference':'count'}).reset_index())
+
+        p = figure(plot_width=1000, plot_height=150, title="Speed Difference Distribution", toolbar_location="above")
+
+        p.vbar(x='bins' , top='speed_difference', width=1, color='navy', alpha=0.5, source = source)
+
+        #p.yaxis.visible = False
+        #p.xaxis.formatter = NumeralTickFormatter(format="0.f%")
+        p.xgrid.visible = False
+        p.ygrid.visible = False
+        #p.background_fill_color = None
+        p.background_fill_alpha = 0.5
+        p.border_fill_color = None
+
+        return p
+
+    def hbar_chart(df,col):
+        """
+        returns bokeh horizontal barchart representing mean % diff
+
+        Keyword arguments:
+        df -- dataframe to derive content of barchart
+        col -- column name for values to diplay in graph
+        """
+        df_src = df[[col]]
+        df_src['type'] = df_src.index
+        df_src['order'] = 0
+
+        df_src['order'] = np.where(df_src.index =='Speed',2,df_src['order'])
+        df_src['order'] = np.where(df_src.index =='Occupancy',1,df_src['order'])
+        df_src['order'] = np.where(df_src.index =='Volume',0,df_src['order'])
+        df_src['color'] = '#C0C0C0'
+        df_src['color'] = np.where(df_src['Mean Diff'] < -.05, '#FF0000', df_src['color'])
+        df_src['color'] = np.where(df_src['Mean Diff'] > .05, '#008000', df_src['color'])
+        source = ColumnDataSource(data = df_src.sort_values(by='order'))
+
+        hover = HoverTool(
+                tooltips=[
+                    ("Corridor Attribute", "@type"),
+                    ("% Difference", "@{%s}" % (col) + '{%0.2f}'),
+                ]
+            )
+        tools = ['reset','save',hover]
+        p = figure(plot_width=400, plot_height=175, toolbar_location="above",
+                   title = 'Mean Difference', tools = tools)
+
+        p.hbar(y='order', height=0.5, left=0,fill_color ='color',line_color=None,
+               right=col, color="navy", source = source)
+
+        p.yaxis.visible = False
+        p.xaxis.formatter = NumeralTickFormatter(format="0.f%")
+        p.xgrid.visible = False
+        p.ygrid.visible = False
+        #p.background_fill_color = None
+        p.background_fill_alpha = 0.5
+        p.border_fill_color = None
+
+        return source, p
+
+
+    def scatter_plot(title_text):
+        rng = np.random.RandomState(0)
+        x = rng.randn(100)
+        y = rng.randn(100)
+
+        source = ColumnDataSource(
+                data=dict(
+                    x=rng.randn(100),
+                    y=rng.randn(100),
+                    desc=['A', 'b', 'C', 'd', 'E']*20,
+                )
+            )
+
+        hover = HoverTool(
+                tooltips=[
+                    ("index", "$index"),
+                    ("(x,y)", "($x, $y)"),
+                    ("desc", "@desc"),
+                ]
+            )
+
+        p = figure(plot_width=300, plot_height=250, tools=[hover, 'box_select'], toolbar_location="above",
+                   title=title_text)
+
+        p.circle('x', 'y', size=5, source=source)
+        #p.background_fill_color = None
+        p.background_fill_alpha = 0.5
+        p.border_fill_color = None
+
+        return p
+
+
 
     """
     return selection tab contents
@@ -394,7 +395,7 @@ def selection_tab(rtdap_data):
     base_map = make_base_map(map_width=450,map_height=960, xaxis=None, yaxis=None,
                 xrange=(-9990000,-9619944), yrange=(5011119,5310000),plot_tools="pan,wheel_zoom,reset,save")
 
-    return row(
+    select_content =  row(
            #PANEL
            column(panel_title, panel_text, corridor_select,date_picker_start,
                date_picker_end, day_of_week, time_of_day,tod_description,
@@ -413,3 +414,5 @@ def selection_tab(rtdap_data):
                     row(Spacer(width=20),column(Spacer(height=10),column(base_map, css_classes = ["w3-panel","w3-white","w3-card-4"],width = 500)))
               ), css_classes=["w3-container", "w3-row-padding"]),
           css_classes = ["w3-container","w3-light-grey"], width = 2000, height = 1200)
+
+    return select_content

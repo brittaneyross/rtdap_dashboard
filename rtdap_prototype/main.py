@@ -49,8 +49,6 @@ vds_table['date'] = pd.to_datetime(vds_table['date'],format='%Y-%m-%d')
 
 vds_table['dow'] = vds_table['dow'].replace([1,2,3,4,5],['Monday','Tuesday','Wednesday','Thursday','Friday'])
 
-vds_table.loc[vds_table['date'] > '2017-04-03']
-
 #side panel and view
 def analytics_tab():
     panel_title = Div(text="Highway Performance", css_classes = ["panel-title","text-center"])
