@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import random
 from datetime import datetime, date
+from os.path import dirname, join
 
 #bokeh
 from bokeh.io import show, output_notebook, push_notebook
@@ -33,7 +34,7 @@ from bokeh.io import curdoc
 from scripts.select import selection_tab
 
 #table
-vds_table = pd.read_csv(r'C:\Users\bross\Documents\GitHub\rtdap\rtdap_prototype\data\vds_table_2008_2018.csv')
+vds_table = pd.read_csv(join(dirname(__file__),'data','vds_table_2008_2018.csv'))
 
 #
 vds_table['corridor'] = vds_table['corridor'].fillna('N/A')
