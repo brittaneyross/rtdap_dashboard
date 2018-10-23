@@ -1,9 +1,11 @@
+channels:
+  - conda-forge
+  - defaults
 dependencies:
   - bokeh
-  - nbserverproxy
+  - nbserverproxy=0.8.3=py36_0
   - pandas
   - numpy
-  - holoviews
   - fiona
   - geopandas
   - shapely
